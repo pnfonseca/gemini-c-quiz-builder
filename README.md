@@ -7,7 +7,7 @@ Designed for university programming courses to assess student comprehension and 
 ## Features
 
 - Automated Code Parsing: Recursively reads `.c` and `.h` source files across student project folders.
-- Flexible Inputs: Works with local submission subfolders (`./submissoes/`) or GitHub repository URLs.
+- Flexible Inputs: Works with local submission subfolders (e.g., `./submissoes/`) or GitHub repository URLs.
 - Separate Student & Teacher Outputs:
   - **Student Worksheet (`quiz_<group>.pdf` & `quiz_<group>.md`)**: Printable quiz with standard `[ ]` checkboxes and student/date headers.
   - **Teacher Key (`chave_<group>.md`)**: Solution key with answer letters and 1-sentence concept explanations.
@@ -25,6 +25,7 @@ Designed for university programming courses to assess student comprehension and 
 1. Clone or download this repository.
 2. Install the required dependencies: `google-genai`
 3. Export your API Key: `export GEMINI_API_KEY="your_key"`
+   * To get you API Key, login with your Google account in [https://aistudio.google.com](https://aistudio.google.com) and choose "Get API Key" (the button with a key sign at the bottom left), or go straight to [https://aistudio.google.com/api-keys](https://aistudio.google.com/api-keys)
 4. Run the script: `python3 gerar_quizzes.py`
 
 ## CLI Options
@@ -42,7 +43,7 @@ Designed for university programming courses to assess student comprehension and 
 - `setup.sh`: Environment and repo setup helper script
 - `README.md`: Project documentation
 - `.gitignore`: Git ignore rules
-- `submissoes/`: Default local folder for student subdirectories
+- `./`: Default local folder for student subdirectories, one folder per group
 - `quizzes_gerados/`: Generated output folder (`.md` and `.pdf` files)
 
 ## License
