@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+env/
+venv/
+ENV/
+
+# API Key & Local Environment Variables
+.env
+.env.local
+
+# Output Files (Generated Quizzes & Answer Keys)
+quizzes_gerados/
+quizzes_finais/
+*.pdf
+
+# Temporary Git Clones & Student Submissions
+repos_temp/
+submissoes/
+
+# IDEs & OS Files
+.vscode/
+.idea/
+.DS_Store
