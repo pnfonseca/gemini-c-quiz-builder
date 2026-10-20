@@ -19,6 +19,7 @@ Designed for university programming courses to assess student comprehension and 
 - Linux (Ubuntu/Debian recommended)
 - Python 3.10+
 - Pandoc and LaTeX (for local PDF compilation)
+  - In Ubuntu 26.04, it may be necessary to install the package texlive-latex-recommended (`sudo apt install texlive-latex-recommended`) for the proper generation of PDF files.
 
 ## Quick Start
 
