@@ -6,6 +6,10 @@ import subprocess
 from pathlib import Path
 from google import genai
 
+# Substituição de segurança para evitar barras invertidas soltas a quebrar o LaTeX
+        # (Converte \n isolado em `\n` se não estiver já protegido por crases)
+import re
+
 # Initialize the Gemini API client (uses GEMINI_API_KEY environment variable)
 client = genai.Client()
 
@@ -144,6 +148,8 @@ def gerar_quiz_grupo(nome_identificador, codigo_c, modelo="gemini-3.8-flash", pa
         else:
             conteudo_quiz = texto_completo.strip()
             conteudo_chave = "Chave de correção não gerada separadamente."
+
+        conteudo_quiz = re.sub(r'(?<!`)\\(n|t|r|0)(?!`)', r'`\\\1`', conteudo_quiz)
 
         # 1. Save Student Quiz Markdown
         with open(ficheiro_quiz_md, 'w', encoding='utf-8') as f:
