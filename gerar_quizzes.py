@@ -1,21 +1,20 @@
 #!/usr/bin/env python3
 import os
 import glob
+import re
 import argparse
 import subprocess
 from pathlib import Path
 from google import genai
 
-# Substituição de segurança para evitar barras invertidas soltas a quebrar o LaTeX
-        # (Converte \n isolado em `\n` se não estiver já protegido por crases)
-import re
-
-# Initialize the Gemini API client (uses GEMINI_API_KEY environment variable)
+# Inicializa o cliente da API do Gemini (utiliza a variável de ambiente GEMINI_API_KEY)
 client = genai.Client()
 
 SYSTEM_PROMPT = """
 És um professor universitário da disciplina de Programação em C.
 O teu objetivo é gerar um mini-quiz de avaliação/triagem curta com 5 perguntas de escolha múltipla para verificar a compreensão e apropriação dos conceitos do código C submetido pelos alunos.
+
+O código dos alunos está em subpastas, uma para cada grupo. O teu trabalho é criar o quiz que avalie o conhecimento das razões para ter escrito o código (apropriação dos conhecimentos) e não a capacidade de memorizar o código.
 
 Regras de Formatação e Conteúdo:
 1. Título do documento: "Mini-Quiz de Programação em C". NUNCA uses termos como "Verificação de Autoria" ou "Fraude".
@@ -30,14 +29,21 @@ Regras de Formatação e Conteúdo:
    - 5 questões de escolha múltipla com apenas 1 opção correta.
    - Foco na compreensão das opções de implementação (ex: funcionamento de fórmulas, tratamento de erros, limites de variáveis, controlo de fluxo).
    - Respostas rápidas e diretas para quem trabalhou ou estudou o código.
+   - Para reduzir o foco na memorização, inclui excertos de código no texto da pergunta, sempre que for relevante.
 
-5. Formato de Saída (MUITO IMPORTANTE):
-   Deverás dividir a tua resposta exatamente em DUAS secções separadas pela marca "=== CHAVE DE CORRECAO ===":
+5. Formatação de Código e Carateres Especiais:
+   - Os blocos de código C DEVEM utilizar a sintaxe padrão de blocos Markdown (```c ... ```).
+   - Excertos de código ou sequências de escape no texto das perguntas (como `\\n`, `\\t`, `scanf()`, `getchar()`) DEVEM estar SEMPRE envolvidos por crases inline (ex: `\\n`).
+
+6. Formato de Saída (MUITO IMPORTANTE):
+   Deverás dividir a tua resposta exatamente em DUAS partes separadas pela marca "=== CHAVE DE CORRECAO ===":
 
 [INÍCIO DA PRIMEIRA SECÇÃO - QUIZ DO ALUNO]
 # Mini-Quiz de Programação em C
 
-**Nome do Aluno:** ____________________________________  **Data:** ______________
+**Nome do Aluno:** ____________________________________  
+**NMec:**______________s
+**Data:** ______________
 **Grupo / Projeto:** {nome_identificador}
 
 ---
@@ -53,7 +59,7 @@ Regras de Formatação e Conteúdo:
 === CHAVE DE CORRECAO ===
 
 [INÍCIO DA SEGUNDA SECÇÃO - CHAVE DO DOCENTE]
-# Chave de Correção (Uso Exclusivo do Docente)
+# Chave de Correção
 **Grupo / Projeto:** {nome_identificador}
 
 1. Opção Correta: [Ex: B] - [Breve explicação de 1 frase do conceito]
@@ -61,8 +67,40 @@ Regras de Formatação e Conteúdo:
 ...
 """
 
+def sanitizar_markdown(texto):
+    """
+    Higieniza o Markdown antes de guardar para garantir compatibilidade com o Pandoc/LaTeX:
+    - Preserva o código C dentro dos blocos ```c ... ``` sem alterar a sintaxe C.
+    - Remove crases indevidas inseridas dentro de blocos de código C.
+    - Assegura que sequências de escape em texto livre ficam devidamente formatadas como código inline (`\\n`).
+    """
+    linhas = texto.split('\n')
+    linhas_limpas = []
+    em_bloco_codigo = False
+
+    for linha in linhas:
+        if linha.strip().startswith('```'):
+            em_bloco_codigo = not em_bloco_codigo
+            linhas_limpas.append(linha)
+            continue
+        
+        if em_bloco_codigo:
+            # Dentro do bloco de código C: remove crases espúrias à volta de \n
+            linha_corrigida = linha.replace("'`\\n`'", "'\\n'").replace("`\\n`", "\\n")
+            linhas_limpas.append(linha_corrigida)
+        else:
+            # Fora de blocos de código: limpa crases duplas/espúrias e garante proteção de barras invertidas soltas
+            linha_corrigida = linha.replace("'`\\n`'", "'\\n'").replace("`\\n`", "\\n")
+            parts = linha_corrigida.split('`')
+            for i in range(0, len(parts), 2):  # partes fora de crases inline
+                parts[i] = re.sub(r'\\([ntr0])', r'`\\\1`', parts[i])
+            linha_corrigida = '`'.join(parts)
+            linhas_limpas.append(linha_corrigida)
+            
+    return '\n'.join(linhas_limpas)
+
 def converter_md_para_pdf(ficheiro_md, ficheiro_pdf):
-    """Converts a Markdown file to PDF locally using pandoc on Linux."""
+    """Converte um ficheiro Markdown para PDF localmente utilizando o pandoc no Linux."""
     try:
         resultado = subprocess.run(
             ["pandoc", ficheiro_md, "-o", ficheiro_pdf],
@@ -80,7 +118,7 @@ def converter_md_para_pdf(ficheiro_md, ficheiro_pdf):
         print(f"⚠️ Erro ao executar conversão para PDF: {e}")
 
 def ler_codigo_c_pasta(caminho_pasta):
-    """Finds and concatenates all .c and .h code files in a folder."""
+    """Procura e junta todo o código dos ficheiros .c e .h de uma pasta."""
     conteudo_total = ""
     ficheiros = glob.glob(os.path.join(caminho_pasta, "**", "*.[ch]"), recursive=True)
     
@@ -96,7 +134,7 @@ def ler_codigo_c_pasta(caminho_pasta):
     return conteudo_total
 
 def processar_repositorio_git(repo_url, pasta_destino="./repos_temp"):
-    """Clones or pulls a Git repository."""
+    """Faz clone ou pull de um repositório Git."""
     nome_repo = repo_url.rstrip('/').split('/')[-1].replace('.git', '')
     caminho_local = os.path.join(pasta_destino, nome_repo)
     
@@ -110,13 +148,13 @@ def processar_repositorio_git(repo_url, pasta_destino="./repos_temp"):
     return caminho_local, nome_repo
 
 def gerar_quiz_grupo(nome_identificador, codigo_c, modelo="gemini-3.8-flash", pasta_saida="./quizzes_gerados", forcar=False, gerar_pdf=True):
-    """Sends C code to Gemini, splits output into Student Quiz and Teacher Key, and compiles Student PDF."""
+    """Envia o código C para a API do Gemini, separa o Quiz da Chave e compila o PDF do Aluno."""
     os.makedirs(pasta_saida, exist_ok=True)
     ficheiro_quiz_md = os.path.join(pasta_saida, f"quiz_{nome_identificador}.md")
     ficheiro_chave_md = os.path.join(pasta_saida, f"chave_{nome_identificador}.md")
     ficheiro_quiz_pdf = os.path.join(pasta_saida, f"quiz_{nome_identificador}.pdf")
     
-    # Resume check
+    # Verificação de retoma
     if os.path.exists(ficheiro_quiz_md) and os.path.getsize(ficheiro_quiz_md) > 0 and not forcar:
         print(f"⏩ [Ignorado] Quiz para '{nome_identificador}' já existe em: {ficheiro_quiz_md}")
         if gerar_pdf and not os.path.exists(ficheiro_quiz_pdf):
@@ -140,7 +178,7 @@ def gerar_quiz_grupo(nome_identificador, codigo_c, modelo="gemini-3.8-flash", pa
         
         texto_completo = response.text
         
-        # Split into Student Quiz and Teacher Solution Key
+        # Separa o Quiz do Aluno da Chave do Docente
         if "=== CHAVE DE CORRECAO ===" in texto_completo:
             partes = texto_completo.split("=== CHAVE DE CORRECAO ===")
             conteudo_quiz = partes[0].strip()
@@ -149,19 +187,21 @@ def gerar_quiz_grupo(nome_identificador, codigo_c, modelo="gemini-3.8-flash", pa
             conteudo_quiz = texto_completo.strip()
             conteudo_chave = "Chave de correção não gerada separadamente."
 
-        conteudo_quiz = re.sub(r'(?<!`)\\(n|t|r|0)(?!`)', r'`\\\1`', conteudo_quiz)
+        # Higieniza o Markdown para evitar erros LaTeX no Pandoc
+        conteudo_quiz = sanitizar_markdown(conteudo_quiz)
+        conteudo_chave = sanitizar_markdown(conteudo_chave)
 
-        # 1. Save Student Quiz Markdown
+        # 1. Guarda o Markdown do Quiz do Aluno
         with open(ficheiro_quiz_md, 'w', encoding='utf-8') as f:
             f.write(conteudo_quiz)
         print(f"✅ Quiz do Aluno guardado em: {ficheiro_quiz_md}")
 
-        # 2. Save Teacher Key Markdown
+        # 2. Guarda o Markdown da Chave do Docente
         with open(ficheiro_chave_md, 'w', encoding='utf-8') as f:
             f.write(conteudo_chave)
         print(f"🔑 Chave do Docente guardada em: {ficheiro_chave_md}")
         
-        # 3. Generate PDF for Student Quiz ONLY (0 token consumption)
+        # 3. Converte para PDF apenas o Quiz do Aluno
         if gerar_pdf:
             converter_md_para_pdf(ficheiro_quiz_md, ficheiro_quiz_pdf)
             
@@ -226,7 +266,7 @@ Exemplos de Utilização:
     # -------------------------------------------------------------------------
     if args.modo in ["github", "ambos"]:
         REPOS_GITHUB = [
-            # Add GitHub repository URLs here if needed
+            # Adicione aqui os URLs dos repositórios GitHub, se aplicável
         ]
         
         if REPOS_GITHUB:
